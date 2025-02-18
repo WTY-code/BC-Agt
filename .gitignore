@@ -1,0 +1,15 @@
+# API KEY
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+
+# Virtual environment
+venv/
+env/

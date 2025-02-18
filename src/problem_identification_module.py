@@ -12,7 +12,7 @@ import os
 class ProblemIdentificationModule:
     def __init__(self, llm: ChatOpenAI, vector_store_manager: VectorStoreManager):
         self.llm = llm
-        self.retriever = vector_store_manager.get_retriever()
+        self.retriever = vector_store_manager.get_retriever("problem_analysis")
         self.query_generator = RAGQueryGenerator()
         
         problem_template = """

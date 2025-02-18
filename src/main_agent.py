@@ -64,10 +64,10 @@ def main():
     """Example usage of the Fabric Parameter Adjustment Agent."""
     try:
         # Initialize vector store manager and populate database
-        vector_store_manager = VectorStoreManager(persist_directory="../chroma_db")
+        vector_store_manager = VectorStoreManager(persist_directory="./chroma_db")
         
         # Initialize the database if it doesn't exist
-        if not os.path.exists("../chroma_db"):
+        if not os.path.exists("./chroma_db"):
             print("Initializing knowledge base...")
             vector_store_manager.initialize_knowledge_base()
         

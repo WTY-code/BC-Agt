@@ -1,200 +1,235 @@
 # vector_store.py
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.document_loaders import TextLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from typing import List, Dict
+from typing import List, Dict, Optional
+from dotenv import load_dotenv
 import os
+import glob
 import json
 
 class VectorStoreManager:
-    def __init__(self, persist_directory: str = "../chroma_db"):
+    def __init__(self, persist_directory: str = "./chroma_db", batch_size: int = 100):
         self.persist_directory = persist_directory
         self.embeddings = OpenAIEmbeddings()
-        self.collection_name = "fabric_knowledge"
+        self.collections = {
+            "problem_analysis": "problem_analysis_knowledge",
+            "config_recommendation": "config_recommendation_knowledge"
+        }
         
         # Initialize text splitter for document processing
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len,
-            separators=["\n\n", "\n", " ", ""]
+            separators=["\n## ", "\n### ", "\n#### ", "\n", " ", ""]
         )
 
-    def initialize_knowledge_base(self) -> None:
-        """Initialize the vector store with example knowledge base documents."""
-        # Example knowledge base documents
-        knowledge_base = {
-            "configuration_best_practices": """
-            Hyperledger Fabric Configuration Best Practices:
-            
-            1. Block Configuration:
-            - Optimal block size depends on network capacity and transaction volume
-            - For high throughput networks: 100-500 transactions per block
-            - For networks with strict latency requirements: 10-50 transactions per block
-            - Block timeout: 2s for high performance, 5s for balanced systems
-            
-            2. Consensus Configuration:
-            - Raft ordering service recommended for most deployments
-            - Kafka recommended for very high throughput requirements
-            - Maximum batch timeout: Should not exceed 2s for optimal performance
-            
-            3. Endorsement Policies:
-            - Simple policies (e.g., ANY) for development
-            - N of M policies for production (e.g., 2 of 3)
-            - Consider organizational requirements and trust model
-            
-            4. Channel Configuration:
-            - Separate channels for different business domains
-            - Avoid too many channels (increases system overhead)
-            - Consider cross-channel queries impact
-            
-            5. Resource Allocation:
-            - CPU: Minimum 4 cores per peer
-            - Memory: 8GB minimum for peers
-            - Disk: SSD recommended, minimum 100GB
-            - Network: 1Gbps minimum for production
-            """,
-            
-            "performance_troubleshooting": """
-            Hyperledger Fabric Performance Troubleshooting Guide:
-            
-            1. Low Transaction Throughput:
-            - Check block size configuration
-            - Verify endorsement policy complexity
-            - Monitor system resources (CPU, Memory, Disk I/O)
-            - Analyze network latency between nodes
-            
-            2. High Latency Issues:
-            - Review block timeout settings
-            - Check network connectivity
-            - Analyze endorsement policy path
-            - Monitor chaincode execution time
-            
-            3. Timeout Problems:
-            - Increase operation timeouts
-            - Check system resource utilization
-            - Verify network stability
-            - Review chaincode complexity
-            
-            4. Resource Bottlenecks:
-            - Monitor CPU utilization (should be <80%)
-            - Check memory usage and garbage collection
-            - Verify disk I/O performance
-            - Analyze network bandwidth utilization
-            
-            5. Common Solutions:
-            - Increase block size for higher throughput
-            - Optimize endorsement policies
-            - Scale hardware resources
-            - Tune batch timeout settings
-            """,
-            
-            "scaling_guidelines": """
-            Hyperledger Fabric Scaling Guidelines:
-            
-            1. Horizontal Scaling:
-            - Add more peers for read scalability
-            - Increase orderer nodes for fault tolerance
-            - Deploy multiple channels for parallel processing
-            - Use private data collections for data partitioning
-            
-            2. Vertical Scaling:
-            - Increase CPU cores for transaction processing
-            - Add memory for better caching
-            - Upgrade to faster storage (NVMe SSDs)
-            - Improve network capacity
-            
-            3. Configuration Scaling:
-            - Adjust block size based on network capacity
-            - Tune batch timeout for optimal throughput
-            - Modify endorsement policies for performance
-            - Configure cache sizes appropriately
-            
-            4. Network Optimization:
-            - Implement service discovery
-            - Use gossip protocol effectively
-            - Optimize anchor peer selection
-            - Configure leader election parameters
-            
-            5. Monitoring Requirements:
-            - Track peer resource utilization
-            - Monitor orderer performance
-            - Analyze transaction latency
-            - Measure chaincode execution time
-            """
-        }
-
-        # Create documents from knowledge base
+    def _load_markdown_files(self, directory: str) -> List[Dict[str, str]]:
+        """Load all markdown files from a directory."""
         documents = []
-        for topic, content in knowledge_base.items():
-            chunks = self.text_splitter.split_text(content)
-            for i, chunk in enumerate(chunks):
-                documents.append({
-                    "text": chunk,
-                    "metadata": {
-                        "source": topic,
-                        "chunk": i
+        
+        try:
+            # Get all .md files in the directory
+            md_files = glob.glob(os.path.join(directory, "*.md"))
+            
+            for file_path in md_files:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                    file_name = os.path.basename(file_path)
+                    documents.append({
+                        "content": content,
+                        "source": file_name,
+                        "type": os.path.basename(os.path.dirname(directory))
+                    })
+            
+            return documents
+        except Exception as e:
+            print(f"Error loading markdown files from {directory}: {str(e)}")
+            return []
+        
+    
+
+    def initialize_knowledge_base(self, source_directory: str = "./source_knowledge") -> Dict:
+        """Initialize the vector store with knowledge base documents from both collections."""
+        try:
+            # Create persist directory if it doesn't exist
+            os.makedirs(self.persist_directory, exist_ok=True)
+            
+            results = {}
+            
+            # Process each collection
+            for collection_type, collection_name in self.collections.items():
+                # Load documents from corresponding directory
+                directory_path = os.path.join(source_directory, collection_type)
+                documents = self._load_markdown_files(directory_path)
+                
+                if not documents:
+                    results[collection_type] = {
+                        "status": "error",
+                        "error": f"No documents found in {directory_path}"
                     }
-                })
+                    continue
 
-        # Initialize Chroma with documents
-        texts = [doc["text"] for doc in documents]
-        metadatas = [doc["metadata"] for doc in documents]
-        
-        db = Chroma.from_texts(
-            texts=texts,
-            metadatas=metadatas,
-            embedding=self.embeddings,
-            persist_directory=self.persist_directory,
-            collection_name=self.collection_name
-        )
-        db.persist()
-        print(f"Initialized vector store with {len(texts)} documents")
+                # Process documents
+                processed_docs = []
+                processed_metadatas = []
+                
+                for doc in documents:
+                    chunks = self.text_splitter.split_text(doc["content"])
+                    for i, chunk in enumerate(chunks):
+                        processed_docs.append(chunk)
+                        processed_metadatas.append({
+                            "source": doc["source"],
+                            "chunk": i,
+                            "type": doc["type"]
+                        })
 
-    def add_documents(self, documents: List[Dict[str, str]]) -> None:
-        """Add new documents to the vector store.
-        
-        Args:
-            documents: List of dicts with 'content' and 'source' keys
-        """
+                # Initialize Chroma with documents
+                db = Chroma.from_texts(
+                    texts=processed_docs,
+                    metadatas=processed_metadatas,
+                    embedding=self.embeddings,
+                    persist_directory=self.persist_directory,
+                    collection_name=collection_name
+                )
+                db.persist()
+                
+                results[collection_type] = {
+                    "status": "success",
+                    "documents_processed": len(processed_docs),
+                    "source_files": len(documents)
+                }
+            
+            return {
+                "status": "success",
+                "collections": results
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    def get_retriever(self, collection_type: str):
+        """Get a retriever instance for a specific collection."""
+        if collection_type not in self.collections:
+            raise ValueError(f"Invalid collection type: {collection_type}")
+            
         db = Chroma(
             persist_directory=self.persist_directory,
             embedding_function=self.embeddings,
-            collection_name=self.collection_name
+            collection_name=self.collections[collection_type]
         )
-
-        processed_docs = []
-        processed_metadatas = []
-
-        for doc in documents:
-            chunks = self.text_splitter.split_text(doc['content'])
-            for i, chunk in enumerate(chunks):
-                processed_docs.append(chunk)
-                processed_metadatas.append({
-                    "source": doc['source'],
-                    "chunk": i
-                })
-
-        db.add_texts(
-            texts=processed_docs,
-            metadatas=processed_metadatas
-        )
-        db.persist()
-        print(f"Added {len(processed_docs)} new document chunks to vector store")
-
-    def get_retriever(self):
-        """Get a retriever instance for the vector store."""
-        db = Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embeddings,
-            collection_name=self.collection_name
-        )
+        
         return db.as_retriever(
             search_kwargs={
                 "k": 5,
                 "fetch_k": 10,
-                "maximal_marginal_relevance": True,
-                "filter": None
+                "maximal_marginal_relevance": True
             }
         )
+
+    def add_documents(self, documents: List[Dict[str, str]], collection_type: str) -> Dict:
+        """Add new documents to a specific collection."""
+        try:
+            if collection_type not in self.collections:
+                return {
+                    "status": "error",
+                    "error": f"Invalid collection type: {collection_type}"
+                }
+
+            db = Chroma(
+                persist_directory=self.persist_directory,
+                embedding_function=self.embeddings,
+                collection_name=self.collections[collection_type]
+            )
+
+            processed_docs = []
+            processed_metadatas = []
+
+            for doc in documents:
+                chunks = self.text_splitter.split_text(doc['content'])
+                for i, chunk in enumerate(chunks):
+                    processed_docs.append(chunk)
+                    processed_metadatas.append({
+                        "source": doc['source'],
+                        "chunk": i,
+                        "type": collection_type
+                    })
+
+            db.add_texts(
+                texts=processed_docs,
+                metadatas=processed_metadatas
+            )
+            db.persist()
+            
+            return {
+                "status": "success",
+                "documents_added": len(processed_docs)
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    def process(self, command: Dict) -> Dict:
+        """Process commands for the vector store."""
+        try:
+            action = command.get("action")
+            if action == "initialize":
+                source_dir = command.get("source_directory", "./source_knowledge")
+                return self.initialize_knowledge_base(source_dir)
+            elif action == "add_documents":
+                collection_type = command.get("collection_type")
+                documents = command.get("documents", [])
+                return self.add_documents(documents, collection_type)
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Invalid action: {action}"
+                }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+if __name__ == "__main__":
+
+    # load api key
+    load_dotenv()
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+
+    # Example usage
+    manager = VectorStoreManager()
+    
+    # Initialize knowledge base
+    init_command = {
+        "action": "initialize",
+        "source_directory": "./source_knowledge"
+    }
+    
+    result = manager.process(init_command)
+    print("\nInitialization Result:")
+    print(json.dumps(result, indent=2))
+    
+    # # Example of adding new documents
+    # new_docs_command = {
+    #     "action": "add_documents",
+    #     "collection_type": "problem_analysis",
+    #     "documents": [
+    #         {
+    #             "content": "Example new problem analysis document",
+    #             "source": "new_doc.md"
+    #         }
+    #     ]
+    # }
+    
+    # result = manager.process(new_docs_command)
+    # print("\nAdd Documents Result:")
+    # print(json.dumps(result, indent=2))

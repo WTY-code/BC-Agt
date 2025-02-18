@@ -11,7 +11,7 @@ import os
 class ConfigurationRecommendationModule:
     def __init__(self, llm: ChatOpenAI, vector_store_manager: VectorStoreManager):
         self.llm = llm
-        self.retriever = vector_store_manager.get_retriever()
+        self.retriever = vector_store_manager.get_retriever("config_recommendation")
         self.query_generator = RAGQueryGenerator()
 
         config_template = """
