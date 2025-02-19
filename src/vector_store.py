@@ -1,8 +1,9 @@
 # vector_store.py
-from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 import asyncio
@@ -12,9 +13,10 @@ import glob
 import json
 
 class VectorStoreManager:
-    def __init__(self, persist_directory: str = "./chroma_db", batch_size: int = 100):
+    def __init__(self, persist_directory: str = "./chroma_db", batch_size: int = 100, 
+                 model_name: str = "sentence-transformers/all-mpnet-base-v2"):
         self.persist_directory = persist_directory
-        self.embeddings = OpenAIEmbeddings()
+        self.embeddings = HuggingFaceEmbeddings(model_name=model_name)
         self.batch_size = batch_size
         self.collections = {
             "problem_analysis": "problem_analysis_knowledge",
@@ -59,26 +61,27 @@ class VectorStoreManager:
             total_batches = (len(processed_docs) + self.batch_size - 1) // self.batch_size
             pbar = tqdm(total=total_batches, desc=f"Processing {collection_name}")
 
-            # create empty collection
+            # create Chroma instance with persistence
             db = Chroma(
                 persist_directory=self.persist_directory,
                 embedding_function=self.embeddings,
                 collection_name=collection_name
             )
 
-            #
+            # Process in batches
             for i in range(0, len(processed_docs), self.batch_size):
                 batch_docs = processed_docs[i:i + self.batch_size]
                 batch_metadatas = processed_metadatas[i:i + self.batch_size]
                 
-                # add batch data
-                db.add_texts(
-                    texts=batch_docs,
-                    metadatas=batch_metadatas
-                )
+                # Create Document objects
+                documents = [
+                    Document(page_content=doc, metadata=meta)
+                    for doc, meta in zip(batch_docs, batch_metadatas)
+                ]
                 
-                # persist data after batch
-                db.persist()
+                # add batch data
+                db.add_documents(documents)
+                
                 pbar.update(1)
 
             pbar.close()
@@ -194,11 +197,14 @@ class VectorStoreManager:
                         "type": collection_type
                     })
 
-            db.add_texts(
-                texts=processed_docs,
-                metadatas=processed_metadatas
-            )
-            db.persist()
+            # Create Document objects
+            langchain_docs = [
+                Document(page_content=doc, metadata=meta)
+                for doc, meta in zip(processed_docs, processed_metadatas)
+            ]
+            
+            # Add documents
+            db.add_documents(langchain_docs)
             
             return {
                 "status": "success",
@@ -234,11 +240,6 @@ class VectorStoreManager:
             }
 
 if __name__ == "__main__":
-
-    # load api key
-    load_dotenv()
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-
     # Example usage
     manager = VectorStoreManager()
     
@@ -251,7 +252,7 @@ if __name__ == "__main__":
     result = manager.process(init_command)
     print("\nInitialization Result:")
     print(json.dumps(result, indent=2))
-    
+
     # # Example of adding new documents
     # new_docs_command = {
     #     "action": "add_documents",
