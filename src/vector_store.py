@@ -1,10 +1,12 @@
 # vector_store.py
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
+import asyncio
+from tqdm import tqdm
 import os
 import glob
 import json
@@ -13,6 +15,7 @@ class VectorStoreManager:
     def __init__(self, persist_directory: str = "./chroma_db", batch_size: int = 100):
         self.persist_directory = persist_directory
         self.embeddings = OpenAIEmbeddings()
+        self.batch_size = batch_size
         self.collections = {
             "problem_analysis": "problem_analysis_knowledge",
             "config_recommendation": "config_recommendation_knowledge"
@@ -49,7 +52,41 @@ class VectorStoreManager:
             print(f"Error loading markdown files from {directory}: {str(e)}")
             return []
         
-    
+    def _batch_process_documents(self, processed_docs: List[str], processed_metadatas: List[Dict], collection_name: str):
+        """process documents by batch"""
+        try:
+            # initiate progress bar
+            total_batches = (len(processed_docs) + self.batch_size - 1) // self.batch_size
+            pbar = tqdm(total=total_batches, desc=f"Processing {collection_name}")
+
+            # create empty collection
+            db = Chroma(
+                persist_directory=self.persist_directory,
+                embedding_function=self.embeddings,
+                collection_name=collection_name
+            )
+
+            #
+            for i in range(0, len(processed_docs), self.batch_size):
+                batch_docs = processed_docs[i:i + self.batch_size]
+                batch_metadatas = processed_metadatas[i:i + self.batch_size]
+                
+                # add batch data
+                db.add_texts(
+                    texts=batch_docs,
+                    metadatas=batch_metadatas
+                )
+                
+                # persist data after batch
+                db.persist()
+                pbar.update(1)
+
+            pbar.close()
+            return db
+
+        except Exception as e:
+            print(f"Error in batch processing: {str(e)}")
+            raise e
 
     def initialize_knowledge_base(self, source_directory: str = "./source_knowledge") -> Dict:
         """Initialize the vector store with knowledge base documents from both collections."""
@@ -86,15 +123,12 @@ class VectorStoreManager:
                             "type": doc["type"]
                         })
 
-                # Initialize Chroma with documents
-                db = Chroma.from_texts(
-                    texts=processed_docs,
-                    metadatas=processed_metadatas,
-                    embedding=self.embeddings,
-                    persist_directory=self.persist_directory,
-                    collection_name=collection_name
+                # init Chroma in batch
+                db = self._batch_process_documents(
+                    processed_docs,
+                    processed_metadatas,
+                    collection_name
                 )
-                db.persist()
                 
                 results[collection_type] = {
                     "status": "success",
