@@ -6,27 +6,39 @@ from vector_store import VectorStoreManager
 from rag_generation import RAGQueryGenerator
 from system_metrics import SystemMetrics
 from typing import List, Dict
+from dotenv import load_dotenv
 import json
 import os
 
+
+load_dotenv()
+api_key = os.getenv('LINKAI_API_KEY')
+api_base = os.getenv('LINKAI_API_BASE')
+
 class ProblemIdentificationModule:
-    def __init__(self, llm: ChatOpenAI, vector_store_manager: VectorStoreManager):
-        self.llm = llm
+    def __init__(self, llm, vector_store_manager: VectorStoreManager):
+        self.llm = llm if llm else ChatOpenAI(
+            temperature=0,
+            model_name="deepseek-chat",                
+            openai_api_base=api_base,
+            openai_api_key=api_key,  
+            max_tokens=None,            
+            streaming=False,            
+            request_timeout=None,       
+            max_retries=6,             
+            model_kwargs={},
+        )
         self.retriever = vector_store_manager.get_retriever("problem_analysis")
-        self.query_generator = RAGQueryGenerator()
+        self.query_generator = RAGQueryGenerator(llm)
         
-        problem_template = """
+        self.template = """
         Analyze the following Hyperledger Fabric system metrics and identify potential problems:
 
         Performance Metrics:
-        - TPS: {tps}
-        - Latency: {latency}ms
-        - Block Size: {block_size}
-        - Concurrent Requests: {concurrent_requests}
-        - Timeouts: {timeouts}
+        {performance_data}
 
         Current Configuration:
-        {current_config}
+        {configuration_data}
 
         Retrieved Knowledge Base Information:
         {context}
@@ -38,82 +50,84 @@ class ProblemIdentificationModule:
         4. Consider system architecture implications
 
         Format your response as JSON with the following structure:
-        {
+        {{
             "problems": [
-                {
+                {{
                     "category": "performance|configuration|resource|architecture",
                     "description": "Detailed problem description",
                     "severity": "high|medium|low",
                     "impact": "Impact on system performance",
                     "related_metrics": ["affected_metric1", "affected_metric2"]
-                }
+                }}
             ],
             "root_causes": [
-                {
+                {{
                     "problem_ref": "Index of related problem",
                     "description": "Detailed root cause explanation",
                     "confidence": "high|medium|low",
                     "evidence": "Evidence from metrics and configuration"
-                }
+                }}
             ]
-        }
+        }}
         """
-        
-        self.problem_chain = LLMChain(
-            llm=llm,
-            prompt=PromptTemplate(
-                template=problem_template,
-                input_variables=["tps", "latency", "block_size", "concurrent_requests", 
-                               "timeouts", "current_config", "context"]
-            )
-        )
 
-    def analyze_problem(self, metrics: SystemMetrics) -> Dict:
-        """Identify system problems and analyze root causes using enhanced RAG."""
-        queries = self.query_generator.generate_queries(
-            {
-                "tps": metrics.tps,
-                "latency": metrics.latency,
-                "block_size": metrics.block_size,
-                "concurrent_requests": metrics.concurrent_requests,
-                "timeouts": metrics.timeouts,
-                "current_config": metrics.current_config
-            },
-            ["block_size", "consensus", "endorsement"]
-        )
-        
-        all_docs = []
-        seen_docs = set()
-        for query in queries:
-            docs = self.retriever.get_relevant_documents(query)
-            for doc in docs:
-                doc_hash = hash(doc.page_content)
-                if doc_hash not in seen_docs:
-                    all_docs.append(doc)
-                    seen_docs.add(doc_hash)
+    def load_json_file(self, file_path: str) -> Dict:
+        """Load and parse a JSON file."""
+        try:
+            with open(file_path, 'r') as file:
+                return json.load(file)
+        except Exception as e:
+            raise Exception(f"Error loading {file_path}: {str(e)}")
 
-        context = "\n\n".join([
-            f"Reference {i+1}:\n{doc.page_content}\n\nSource: {doc.metadata.get('source', 'Unknown')}"
-            for i, doc in enumerate(all_docs[:5])
-        ])
-
-        result = self.problem_chain.run(
-            tps=metrics.tps,
-            latency=metrics.latency,
-            block_size=metrics.block_size,
-            concurrent_requests=metrics.concurrent_requests,
-            timeouts=metrics.timeouts,
-            current_config=json.dumps(metrics.current_config, indent=2),
-            context=context
-        )
-
-        return json.loads(result)
-
-    def process(self, metrics_data: Dict) -> Dict:
+    def analyze_problem(self, performance_path: str, configuration_path: str) -> Dict:
         """Process metrics and return problem analysis."""
         try:
-            metrics = SystemMetrics(**metrics_data)
-            analysis = self.analyze_problem(metrics)
+            performance_data = self.load_json_file(performance_path)
+            configuration_data = self.load_json_file(configuration_path)
+            
+            queries = self.query_generator.generate_problem_analysis_queries(performance_path, configuration_path)
+            print("--------------queries---------------")
+            print(queries)
+            print("------------------------------------")
+            
+            all_docs = []
+            seen_docs = set()
+            for query_obj in queries:
+                if not isinstance(query_obj, dict) or "query" not in query_obj:
+                    print(f"Warning: Invalid query object format: {query_obj}")
+                    continue
+                    
+                # 使用新的 invoke 方法替代 get_relevant_documents
+                docs = self.retriever.invoke(query_obj["query"])
+                
+                for doc in docs:
+                    doc_hash = hash(doc.page_content)
+                    if doc_hash not in seen_docs:
+                        all_docs.append(doc)
+                        seen_docs.add(doc_hash)
+
+            context = "\n\n".join([
+                f"Reference {i+1}:\n{doc.page_content}\n\nSource: {doc.metadata.get('source', 'Unknown')}"
+                for i, doc in enumerate(all_docs[:5])
+            ])
+
+            print("---------------context-----------------")
+            print(context)
+            print("------------------------------------")
+
+            prompt = PromptTemplate(
+                template=self.template,
+                input_variables=["performance_data", "configuration_data","context"]
+            )
+
+            chain = LLMChain(llm=self.llm, prompt=prompt)
+
+            analysis = chain.run({
+                "performance_data": json.dumps(performance_data, indent=2),
+                "configuration_data": json.dumps(configuration_data, indent=2),
+                "context": context
+            })
+
             return {
                 "status": "success",
                 "analysis": analysis
@@ -126,25 +140,27 @@ class ProblemIdentificationModule:
 
 if __name__ == "__main__":
     # Example usage
-    vector_store_manager = VectorStoreManager(persist_directory="../chroma_db")
-    if not os.path.exists("../chroma_db"):
+    vector_store_manager = VectorStoreManager(persist_directory="./chroma_db")
+    if not os.path.exists("./chroma_db"):
         vector_store_manager.initialize_knowledge_base()
     
-    llm = ChatOpenAI(temperature=0)
+    llm = ChatOpenAI(
+        temperature=0,
+        model_name="deepseek-chat",                
+        openai_api_base=api_base,
+        openai_api_key=api_key,  
+        max_tokens=None,            
+        streaming=False,            
+        request_timeout=None,       
+        max_retries=6,             
+        model_kwargs={},
+        )
     module = ProblemIdentificationModule(llm, vector_store_manager)
     
-    example_metrics = {
-        "tps": 100.5,
-        "latency": 250.0,
-        "block_size": 10,
-        "concurrent_requests": 1000,
-        "timeouts": 5,
-        "current_config": {
-            "block_size": 10,
-            "consensus_type": "kafka",
-            "endorsement_policy": "AND('Org1.member', 'Org2.member')"
-        }
-    }
-    
-    result = module.process(example_metrics)
+    result = module.analyze_problem(
+         "./input/performance.json",
+        "./input/configuration.json"
+    )
+
+    print("---------------analysis-----------------")
     print(json.dumps(result, indent=2))

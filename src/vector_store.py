@@ -164,8 +164,8 @@ class VectorStoreManager:
         return db.as_retriever(
             search_kwargs={
                 "k": 5,
-                "fetch_k": 10,
-                "maximal_marginal_relevance": True
+                # "fetch_k": 10,
+                # "maximal_marginal_relevance": True
             }
         )
 
