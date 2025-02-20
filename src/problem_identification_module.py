@@ -4,7 +4,6 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from vector_store import VectorStoreManager
 from rag_generation import RAGQueryGenerator
-from system_metrics import SystemMetrics
 from typing import List, Dict
 from dotenv import load_dotenv
 import json
