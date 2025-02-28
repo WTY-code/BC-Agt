@@ -16,3 +16,6 @@ env/
 
 # Chroma
 chroma_db/
+
+# result
+output/

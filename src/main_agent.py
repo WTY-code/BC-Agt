@@ -100,10 +100,6 @@ class FabricParameterAdjustmentAgent:
             performance_data = self.load_json_file(performance_path)
             configuration_data = self.load_json_file(configuration_path)
             
-            # Save these to the input directory for other modules to use
-            # self.save_json_file(performance_data, "./input/performance.json")
-            # self.save_json_file(configuration_data, "./input/configuration.json")
-            
             # Step 2: Problem identification
             print("Analyzing problems...")
             problem_analysis = self.problem_identification_module.analyze_problem(
@@ -122,9 +118,6 @@ class FabricParameterAdjustmentAgent:
             # Step 3: Generate configuration recommendations
             print("Generating configuration recommendations...")
             try:
-                # Parse problem analysis result for the recommendation module
-                # problem_analysis = self.problem_identification_module.parse_problem_analysis(problem_result)
-                
                 recommendation_result = self.config_recommendation_module.generate_recommendations(
                     problem_analysis,
                     configuration_data
@@ -204,15 +197,22 @@ def main():
             
             if "problem_analysis" in result and "analysis" in result["problem_analysis"]:
                 print("\nProblem Analysis:")
-                print(result["problem_analysis"]["analysis"][:500] + "..." 
-                      if len(result["problem_analysis"]["analysis"]) > 500 
-                      else result["problem_analysis"]["analysis"])
+                analysis = result["problem_analysis"]["analysis"]
+                
+                # Pretty-print the analysis
+                if isinstance(analysis, dict):
+                    problems = analysis.get("problems", [])
+                    for i, prob in enumerate(problems[:2]):  # Show first 2 problems
+                        print(f"  {i+1}. {prob.get('description')}")
+                        print(f"     Severity: {prob.get('severity')}")
+                else:
+                    print(str(analysis)[:500] + "..." if len(str(analysis)) > 500 else str(analysis))
                 
             if "recommendations" in result and "recommendations" in result["recommendations"]:
                 print("\nRecommendations Summary:")
                 recommendations = result["recommendations"]["recommendations"]
                 if isinstance(recommendations, dict) and "recommendations" in recommendations:
-                    for i, rec in enumerate(recommendations["recommendations"]):
+                    for i, rec in enumerate(recommendations["recommendations"][:3]):  # Show first 3 recommendations
                         print(f"  {i+1}. {rec.get('parameter')}: {rec.get('current_value')} → {rec.get('recommended_value')}")
                         print(f"     Priority: {rec.get('priority')}")
                         print(f"     Justification: {rec.get('justification')[:100]}..." 

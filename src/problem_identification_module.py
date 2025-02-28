@@ -81,9 +81,6 @@ class ProblemIdentificationModule:
     def analyze_problem(self, performance_data: Dict, configuration_data: Dict) -> Dict:
         """Process metrics and return problem analysis."""
         try:
-            # performance_data = self.load_json_file(performance_path)
-            # configuration_data = self.load_json_file(configuration_path)
-            
             # queries = self.query_generator.generate_problem_analysis_queries(performance_path, configuration_path)
             queries = self.query_generator._generate_queries(
                 "problem_analysis",
@@ -101,7 +98,6 @@ class ProblemIdentificationModule:
                     print(f"Warning: Invalid query object format: {query_obj}")
                     continue
                     
-                # 使用新的 invoke 方法替代 get_relevant_documents
                 docs = self.retriever.invoke(query_obj["query"])
                 
                 for doc in docs:
@@ -131,10 +127,14 @@ class ProblemIdentificationModule:
                 "configuration_data": json.dumps(configuration_data, indent=2),
                 "context": context
             })
+            
+            # Clean and parse the analysis result
+            cleaned_analysis = analysis.replace('```json\n', '').replace('\n```', '').strip('`').strip()
+            parsed_analysis = json.loads(cleaned_analysis)
 
             return {
                 "status": "success",
-                "analysis": analysis
+                "analysis": parsed_analysis
             }
         except Exception as e:
             return {

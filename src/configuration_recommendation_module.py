@@ -90,11 +90,7 @@ class ConfigurationRecommendationModule:
             if "analysis" not in analysis_result or analysis_result["status"] != "success":
                 raise ValueError("Invalid analysis result format")
             
-            # Clean the JSON string from markdown format
-            analysis_str = analysis_result["analysis"]
-            analysis_str = analysis_str.replace('```json\n', '').replace('\n```', '').strip('`').strip()
-            
-            return json.loads(analysis_str)
+            return analysis_result["analysis"]
         except Exception as e:
             raise Exception(f"Error parsing problem analysis: {str(e)}")
 
@@ -103,9 +99,6 @@ class ConfigurationRecommendationModule:
         try:
             # Parse problem analysis
             problem_analysis = self.parse_problem_analysis(analysis_result)
-            
-            # Load configuration data
-            # configuration_data = self.load_json_file(configuration_path)
             
             # Generate queries based on identified problems
             queries = self.query_generator._generate_queries(
@@ -202,8 +195,7 @@ if __name__ == "__main__":
     # Example problem analysis result from problem identification module
     example_analysis_result = {
         "status": "success",
-        "analysis": """```json
-        {
+        "analysis": {
             "problems": [
                 {
                     "category": "performance",
@@ -222,7 +214,6 @@ if __name__ == "__main__":
                 }
             ]
         }
-        ```"""
     }
     
     result = module.process(
