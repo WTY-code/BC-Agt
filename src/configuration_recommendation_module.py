@@ -98,19 +98,20 @@ class ConfigurationRecommendationModule:
         except Exception as e:
             raise Exception(f"Error parsing problem analysis: {str(e)}")
 
-    def generate_recommendations(self, analysis_result: Dict, configuration_path: str) -> Dict:
+    def generate_recommendations(self, analysis_result: Dict, configuration_data: Dict) -> Dict:
         """Generate configuration recommendations based on problem analysis."""
         try:
             # Parse problem analysis
             problem_analysis = self.parse_problem_analysis(analysis_result)
             
             # Load configuration data
-            configuration_data = self.load_json_file(configuration_path)
+            # configuration_data = self.load_json_file(configuration_path)
             
             # Generate queries based on identified problems
-            queries = self.query_generator.generate_recommendation_queries(
-                problem_analysis=problem_analysis,
-                configuration_path=configuration_path
+            queries = self.query_generator._generate_queries(
+                "recommendation",
+                problem_analysis=json.dumps(problem_analysis, indent=2),
+                configuration_data=json.dumps(configuration_data, indent=2)
             )
             
             print("--------------queries---------------")
@@ -170,6 +171,13 @@ class ConfigurationRecommendationModule:
                 "status": "error",
                 "error": str(e)
             }
+        
+    def process(self, analysis_result: Dict, configuration_path: str) -> Dict:
+        """Generate configuration recommendations based on problem analysis."""
+        configuration_data = self.load_json_file(configuration_path)
+
+        return self.generate_recommendations(analysis_result, configuration_data)
+    
 
 if __name__ == "__main__":
     # Example usage
@@ -217,7 +225,7 @@ if __name__ == "__main__":
         ```"""
     }
     
-    result = module.generate_recommendations(
+    result = module.process(
         analysis_result=example_analysis_result,
         configuration_path="./input/configuration.json"
     )

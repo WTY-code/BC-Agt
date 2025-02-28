@@ -78,13 +78,18 @@ class ProblemIdentificationModule:
         except Exception as e:
             raise Exception(f"Error loading {file_path}: {str(e)}")
 
-    def analyze_problem(self, performance_path: str, configuration_path: str) -> Dict:
+    def analyze_problem(self, performance_data: Dict, configuration_data: Dict) -> Dict:
         """Process metrics and return problem analysis."""
         try:
-            performance_data = self.load_json_file(performance_path)
-            configuration_data = self.load_json_file(configuration_path)
+            # performance_data = self.load_json_file(performance_path)
+            # configuration_data = self.load_json_file(configuration_path)
             
-            queries = self.query_generator.generate_problem_analysis_queries(performance_path, configuration_path)
+            # queries = self.query_generator.generate_problem_analysis_queries(performance_path, configuration_path)
+            queries = self.query_generator._generate_queries(
+                "problem_analysis",
+                performance_data=json.dumps(performance_data, indent=2),
+                configuration_data=json.dumps(configuration_data, indent=2)
+            )
             print("--------------queries---------------")
             print(queries)
             print("------------------------------------")
@@ -136,6 +141,13 @@ class ProblemIdentificationModule:
                 "status": "error",
                 "error": str(e)
             }
+        
+    def process(self, performance_path: str, configuration_path: str) -> Dict:
+        """Process metrics and return problem analysis."""
+        performance_data = self.load_json_file(performance_path)
+        configuration_data = self.load_json_file(configuration_path)
+        
+        return self.analyze_problem(performance_data, configuration_data)
 
 if __name__ == "__main__":
     # Example usage
@@ -156,8 +168,8 @@ if __name__ == "__main__":
         )
     module = ProblemIdentificationModule(llm, vector_store_manager)
     
-    result = module.analyze_problem(
-         "./input/performance.json",
+    result = module.process(
+        "./input/performance.json",
         "./input/configuration.json"
     )
 
