@@ -19,3 +19,6 @@ chroma_db/
 
 # result
 output/
+
+# others
+.DS_Store
