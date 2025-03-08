@@ -1,0 +1,22 @@
+{
+    "PerformanceMetrics": {
+      "SuccessRate": "98.5%",
+      "FailRate": "1.5%",
+      "AvgLatency": "2.3s",
+      "MaxLatency": "4.1s",
+      "MinLatency": "0.8s",
+      "Throughput": "45.2 TPS"
+    },
+    "ResourceConsumption": {
+      "CPU_Avg": "45%",
+      "Memory_Avg": "2.1GB",
+      "NetworkIn": "150MB/s",
+      "NetworkOut": "100MB/s",
+      "DiskWrite": "20MB/s"
+    },
+    "BlockInformation": {
+      "AvgBlockTime": "2.1s",
+      "AvgBlockSize": "1.2MB",
+      "TotalBlocks": "156"
+    }
+  }

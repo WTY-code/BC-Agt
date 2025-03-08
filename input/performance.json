@@ -1,22 +1,120 @@
 {
-    "PerformanceMetrics": {
-      "SuccessRate": "98.5%",
-      "FailRate": "1.5%",
-      "AvgLatency": "2.3s",
-      "MaxLatency": "4.1s",
-      "MinLatency": "0.8s",
-      "Throughput": "45.2 TPS"
-    },
+    "PerformanceMetrics": [
+        {
+            "Name": "Create a car.",
+            "Succ": 5000,
+            "Fail": 0,
+            "SendRate": "4.4 TPS",
+            "MaxLatency": "2.12s",
+            "MinLatency": "0.02s",
+            "AvgLatency": "1.17s",
+            "Throughput": "4.4s"
+        },
+        {
+            "Name": "Change car owner.",
+            "Succ": 120,
+            "Fail": 0,
+            "SendRate": "4.1 TPS",
+            "MaxLatency": "2.04s",
+            "MinLatency": "0.04s",
+            "AvgLatency": "1.50s",
+            "Throughput": "4.0 TPS"
+        },
+        {
+            "Name": "Query all cars.",
+            "Succ": 31148,
+            "Fail": 0,
+            "SendRate": "1074.0 TPS",
+            "MaxLatency": "0.02s",
+            "MinLatency": "0.00s",
+            "AvgLatency": "0.00s",
+            "Throughput": "1073.9 TPS"
+        },
+        {
+            "Name": "Query a car.",
+            "Succ": 32408,
+            "Fail": 0,
+            "SendRate": "1117.5 TPS",
+            "MaxLatency": "0.01s",
+            "MinLatency": "0.00s",
+            "AvgLatency": "0.00s",
+            "Throughput": "1117.4 TPS"
+        }
+    ],
     "ResourceConsumption": {
-      "CPU_Avg": "45%",
-      "Memory_Avg": "2.1GB",
-      "NetworkIn": "150MB/s",
-      "NetworkOut": "100MB/s",
-      "DiskWrite": "20MB/s"
-    },
-    "BlockInformation": {
-      "AvgBlockTime": "2.1s",
-      "AvgBlockSize": "1.2MB",
-      "TotalBlocks": "156"
+        "metadata": {
+            "time_range": ["2025-03-04 06:57:43", "2025-03-04 07:18:52"],
+            "sample_interval": "3s"
+        },
+        "cpu_analysis": {
+            "critical_points": [
+                {
+                    "timestamp": "06:57",
+                    "event": "Initial Peak",
+                    "value": "50.0%"
+                },
+                {
+                    "timestamp": "06:57-07:17",
+                    "pattern": "Stable Fluctuation",
+                    "range": "0.9%-1.5%"
+                },
+                {
+                    "timestamp": "07:17",
+                    "events": [
+                        {"phase": "Sudden Spike", "value": "77.8%"},
+                        {"phase": "Instant Drop", "value": "0.8%"}
+                    ]
+                },
+                {
+                    "timestamp": "07:18",
+                    "events": [
+                        {"phase": "Precipitous Drop", "value": "0.2%"},
+                        {"phase": "Secondary Peak", "value": "68%"}
+                    ]
+                }
+            ],
+            "pattern_summary": "Double-spike phenomenon (49% → 77.8% → 68%) with instant zeroing"
+        },
+        "memory_analysis": {
+            "capacity_metrics": {
+                "total_memory": "31.17GB",
+                "baseline_usage": "4.6% (1.4GB)"
+            },
+            "trend_phases": [
+                {
+                    "phase": "Rapid Allocation",
+                    "time_range": "06:57-06:58",
+                    "growth": "1.4GB → 1.91GB (Δ0.51GB)",
+                    "rate": "30.6GB/h"
+                },
+                {
+                    "phase": "Linear Growth",
+                    "time_range": "06:58-07:16",
+                    "growth": "1.65GB → 1.82GB (Δ0.17GB)",
+                    "rate": "0.5GB/h"
+                },
+                {
+                    "phase": "Release & Decline",
+                    "timestamp": "07:17",
+                    "change": "1.8GB → 1.7GB (Δ-0.1GB)"
+                }
+            ],
+            "pressure_analysis": {
+                "max_usage": "6% (1.82GB)",
+                "leak_suspicion": "Below alert threshold"
+            }
+        },
+        "correlation_findings": [
+            {
+                "timestamp": "07:17",
+                "phenomenon": "CPU spike coincides with memory release",
+                "interpretation": "Possible garbage collection or batch processing trigger"
+            },
+            {
+                "time_range": "07:18",
+                "phenomenon": "Secondary CPU peak with stable memory",
+                "interpretation": "Compute-intensive task execution with effective memory management"
+            }
+        ]
     }
-  }
+}

@@ -1,6 +1,12 @@
 from langchain_community.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+api_key = os.getenv('LINKAI_API_KEY')
+api_base = os.getenv('LINKAI_API_BASE')
 
 # 创建 LLM 实例
 llm = ChatOpenAI(
@@ -9,9 +15,10 @@ llm = ChatOpenAI(
     # model_name="LinkAI-4o",
     # model_name="claude-3-sonnet",
     # model_name="qwen-plus",
-    # model_name="deepseek-chat", 
+    # model_name="deepseek-chat",
+    # model_name="deepseek-r1", 
     model_name="deepseek-reasoner",              
-    openai_api_key="LINKAI_API_KEY",    
+    openai_api_key=api_key,    
     openai_api_base="https://api.link-ai.tech/v1",  
     max_tokens=None,            
     streaming=False,            

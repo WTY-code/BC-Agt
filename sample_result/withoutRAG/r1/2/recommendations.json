@@ -1,0 +1,123 @@
+{
+  "status": "success",
+  "recommendations": {
+    "recommendations": [
+      {
+        "parameter": "Orderer.BatchTimeout",
+        "current_value": "2s",
+        "recommended_value": "500ms",
+        "priority": "high",
+        "justification": "Reducing timeout aligns with actual transaction volume (4 TPS = ~2 tx/500ms). Minimizes artificial waiting while maintaining reasonable batching efficiency. Matches Raft's 500ms default heartbeat interval for better alignment.",
+        "expected_impact": {
+          "performance": "Reduce avg latency by 50-75% (1.17s \u2192 ~0.3-0.6s). Improve throughput to 8-12 TPS",
+          "resource_usage": "Slightly higher CPU utilization from more frequent batch processing",
+          "risks": [
+            "Increased block metadata overhead",
+            "Potential for smaller batches if traffic fluctuates"
+          ]
+        },
+        "implementation_steps": [
+          "Update orderer.yaml BatchTimeout",
+          "Channel config update via configtxlator"
+        ]
+      },
+      {
+        "parameter": "Orderer.BatchSize.MaxMessageCount",
+        "current_value": 20,
+        "recommended_value": 10,
+        "priority": "high",
+        "justification": "Better matches actual batch fill rate (8 tx/2s currently). Combined with 500ms timeout, enables 4-5 tx/batch at steady state. Reduces memory pressure during batch assembly.",
+        "expected_impact": {
+          "performance": "More predictable batch intervals, reduces peak memory usage by 30-40%",
+          "resource_usage": "Lower memory footprint per batch",
+          "risks": [
+            "Underfilled batches during traffic spikes",
+            "Slightly more blocks for same tx volume"
+          ]
+        },
+        "implementation_steps": [
+          "Coordinate with BatchTimeout change in configtx.yaml",
+          "Propagate config update through all channels"
+        ]
+      },
+      {
+        "parameter": "Orderer.EtcdRaft.Consenters",
+        "current_value": 1,
+        "recommended_value": 3,
+        "priority": "high",
+        "justification": "Achieve Raft fault tolerance (N=3). Distribute ordering load across multiple nodes. Required before enabling follower nodes for horizontal scaling.",
+        "expected_impact": {
+          "performance": "Initial 10-15% latency increase from consensus overhead, then 2-3x throughput scaling potential",
+          "resource_usage": "3x orderer nodes required, 50% more network bandwidth",
+          "risks": [
+            "TLS certificate management complexity",
+            "Temporary unavailability during rollout"
+          ]
+        },
+        "implementation_steps": [
+          "Deploy 2 new orderers with identical configs",
+          "Update channel config with new consenters using raftcli",
+          "Rotate TLS certificates cluster-wide"
+        ]
+      },
+      {
+        "parameter": "JVM Heap Settings",
+        "current_value": "Not specified",
+        "recommended_value": "-Xms2G -Xmx4G -XX:+UseG1GC",
+        "priority": "medium",
+        "justification": "Mitigate GC storms with fixed heap bounds and modern garbage collector. Aligns with 77.8% CPU spike patterns suggesting heap pressure.",
+        "expected_impact": {
+          "performance": "Smoother CPU utilization (peaks reduced by 20-30%)",
+          "resource_usage": "Guaranteed 2GB RAM allocation",
+          "risks": [
+            "Over-allocation if other processes share node",
+            "Longer GC pauses if undersized"
+          ]
+        },
+        "implementation_steps": [
+          "Set ORDERER_JAVA_OPTS in orderer service file",
+          "Monitor GC logs with -Xlog:gc*"
+        ]
+      },
+      {
+        "parameter": "Orderer.BatchSize.PreferredMaxBytes",
+        "current_value": "512KB",
+        "recommended_value": "128KB",
+        "priority": "medium",
+        "justification": "Optimize for small transactions indicated by latency patterns. Reduces serialization/deserialization overhead and improves batch packing efficiency.",
+        "expected_impact": {
+          "performance": "10-15% throughput improvement for small tx workloads",
+          "resource_usage": "Lower network payload per block",
+          "risks": [
+            "Fragmented blocks if large tx occur",
+            "Needs tx size monitoring"
+          ]
+        },
+        "implementation_steps": [
+          "Validate average tx size before implementation",
+          "Gradual rollback plan if increased fragmentation observed"
+        ]
+      }
+    ],
+    "implementation_plan": {
+      "order": [
+        "Orderer.BatchTimeout",
+        "Orderer.BatchSize.MaxMessageCount",
+        "JVM Heap Settings",
+        "Orderer.BatchSize.PreferredMaxBytes",
+        "Orderer.EtcdRaft.Consenters"
+      ],
+      "dependencies": [
+        "Batch parameters require coordinated update",
+        "Consenter expansion needs stable batch config first",
+        "JVM changes require orderer restarts"
+      ],
+      "verification_steps": [
+        "Monitor batch fill metrics (tx/batch, bytes/batch)",
+        "Profile CPU/Memory after JVM changes with VisualGC",
+        "Test consensus failover by stopping leader node",
+        "Compare p99 latency before/after using Prometheus"
+      ]
+    }
+  }
+}

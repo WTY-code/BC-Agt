@@ -1,0 +1,42 @@
+{
+    "orderer.yaml": {
+      "General.BatchTimeout": "2s",
+      "General.BatchSize.MaxMessageCount": 500,
+      "General.BatchSize.PreferredMaxBytes": "10MB",
+      "General.MaxWindowSize": 1000,
+      "General.Cluster.SendBufferSize": 100,
+      "Consensus.EtcdRaft.SnapshotIntervalSize": "32MB"
+    },
+    "core.yaml": {
+      "peer.gossip.maxBlockCountToLive": 100,
+      "peer.gossip.stateCheckInterval": "5s",
+      "peer.gossip.maxPropagationBurstLatency": "10ms",
+      "peer.gossip.propagateIterations": 2,
+      "peer.validatorPoolSize": 100,
+      "peer.discovery.gossipMaxRetries": 3,
+      "peer.deliveryclient.blockGossipEnabled": true,
+      "peer.deliveryclient.reconnectTotalTimeThreshold": "1h",
+      "peer.limits.concurrency.EndorserService": 250,
+      "peer.limits.concurrency.DeliverService": 250
+    },
+    "configtx.yaml": {
+      "Channel.BatchTimeout": "2s",
+      "Channel.BatchSize.MaxMessageCount": 500,
+      "Channel.BatchSize.AbsoluteMaxBytes": "100MB",
+      "ChannelGroup.Groups.Orderer.Values.ConsensusType": {
+        "type": "etcdraft",
+        "metadata": {
+          "Options": {
+            "tick_interval": "500ms",
+            "election_tick": 10,
+            "heartbeat_tick": 1
+          }
+        }
+      }
+    },
+    "couchdb_config": {
+      "max_document_open_attempts": 5,
+      "max_retries_on_startup": 10,
+      "request_timeout": "30s"
+    }
+  }

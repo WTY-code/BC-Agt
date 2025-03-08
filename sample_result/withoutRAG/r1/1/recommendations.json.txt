@@ -1,0 +1,122 @@
+{
+  "status": "success",
+  "recommendations": {
+    "recommendations": [
+      {
+        "parameter": "Orderer.BatchTimeout",
+        "current_value": "2s",
+        "recommended_value": "500ms",
+        "priority": "high",
+        "justification": "Current 2s timeout forces low-TPS writes to wait excessively for batch filling. Reducing timeout aligns with observed 4-5 TPS (20 messages would take ~4s to fill at 5 TPS). Smaller timeout reduces artificial latency while maintaining reasonable batch sizes.",
+        "expected_impact": {
+          "performance": "Latency reduction by 50-75% (target: <0.5s avg for writes)",
+          "resource_usage": "Slight increase in block processing frequency (still manageable at low TPS)",
+          "risks": [
+            "Smaller batches may increase block metadata overhead",
+            "Temporary throughput reduction if network delays occur"
+          ]
+        },
+        "implementation_steps": [
+          "Update channel configuration transaction",
+          "Submit config update transaction with new BatchTimeout",
+          "Restart orderer nodes"
+        ]
+      },
+      {
+        "parameter": "Orderer.BatchSize.MaxMessageCount",
+        "current_value": 20,
+        "recommended_value": 10,
+        "priority": "high",
+        "justification": "Current 20 message threshold is mismatched with low write throughput (4-5 TPS). Reducing to 10 enables faster batch filling (2s at 5 TPS) while working synergistically with 500ms timeout to prioritize latency reduction over batch size optimization.",
+        "expected_impact": {
+          "performance": "Faster batch completion (1.5-2x speedup)",
+          "resource_usage": "Reduced memory footprint per batch",
+          "risks": [
+            "Potential underfilled blocks during traffic spikes",
+            "Increased block header overhead ratio"
+          ]
+        },
+        "implementation_steps": [
+          "Coordinate with BatchTimeout change in same config update",
+          "Validate batch metrics post-update"
+        ]
+      },
+      {
+        "parameter": "Orderer.EtcdRaft.Consenters",
+        "current_value": 1,
+        "recommended_value": 3,
+        "priority": "high",
+        "justification": "Single-node Raft consensus provides no fault tolerance and limits throughput scalability. Expanding to 3 nodes enables crash tolerance and parallel ordering capabilities.",
+        "expected_impact": {
+          "performance": "Improved write throughput ceiling (10-15 TPS potential)",
+          "resource_usage": "200% increase in orderer infrastructure",
+          "risks": [
+            "Network partition scenarios requiring consensus",
+            "Increased TLS certificate management"
+          ]
+        },
+        "implementation_steps": [
+          "Deploy 2 new orderer nodes with identical configurations",
+          "Update channel config with new consenters",
+          "Perform config-ledger update with MAJORITY approval"
+        ]
+      },
+      {
+        "parameter": "Orderer.BatchSize.PreferredMaxBytes",
+        "current_value": "512 KB",
+        "recommended_value": "2 MB",
+        "priority": "medium",
+        "justification": "Current 512KB preference limits batch packing efficiency. Increasing to 2MB (while keeping AbsoluteMaxBytes=99MB) allows better utilization of large message capacity without risking oversized blocks.",
+        "expected_impact": {
+          "performance": "10-20% latency improvement for large transactions",
+          "resource_usage": "Moderate memory increase during batch assembly",
+          "risks": [
+            "Temporary memory spikes during large batch assembly"
+          ]
+        },
+        "implementation_steps": [
+          "Include in same batch parameter update as MaxMessageCount",
+          "Monitor memory metrics post-deployment"
+        ]
+      },
+      {
+        "parameter": "JVM Heap Settings",
+        "current_value": "Not specified",
+        "recommended_value": "-Xms4G -Xmx4G -XX:+UseG1GC",
+        "priority": "medium",
+        "justification": "CPU spikes correlate with garbage collection events. Fixed heap prevents dynamic resizing pauses. G1GC improves pause time predictability.",
+        "expected_impact": {
+          "performance": "20-30% reduction in CPU spike magnitude",
+          "resource_usage": "Guaranteed 4GB memory allocation",
+          "risks": [
+            "Over-allocation if system memory is constrained"
+          ]
+        },
+        "implementation_steps": [
+          "Update orderer/fabric-ca container environment variables",
+          "Perform rolling restarts of nodes"
+        ]
+      }
+    ],
+    "implementation_plan": {
+      "order": [
+        "Orderer.BatchTimeout",
+        "Orderer.BatchSize.MaxMessageCount",
+        "Orderer.BatchSize.PreferredMaxBytes",
+        "JVM Heap Settings",
+        "Orderer.EtcdRaft.Consenters"
+      ],
+      "dependencies": [
+        "Batch parameters must be updated together in single transaction",
+        "JVM changes require node restarts before orderer scaling",
+        "New consenters require TLS certs pre-generated"
+      ],
+      "verification_steps": [
+        "Monitor CreateCar/ChangeOwner latency for 60min post-update",
+        "Check etcdraft cluster health via orderer logs",
+        "Profile garbage collection behavior with new JVM settings",
+        "Stress test with 10 TPS write load to validate throughput scaling"
+      ]
+    }
+  }
+}
